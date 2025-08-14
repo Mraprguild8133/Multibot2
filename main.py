@@ -33,14 +33,6 @@ async def post_init(application: Application) -> None:
     await application.bot.set_webhook(webhook_url)
 
 def main():
-    """Start the bot in webhook mode"""
-    # Get bot token from environment
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not bot_token:
-        logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
-        return
-
-    def main():
     """Start the bot"""
     # Get bot token from environment
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
