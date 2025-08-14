@@ -66,14 +66,7 @@ def main():
     # Run the bot
     application.run_polling(allowed_updates=["message"])
 
-    # Flask route for webhook
-    @app.route('/webhook', methods=['POST'])
-    async def webhook():
-        """Handle incoming updates"""
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.update_queue.put(update)
-        return jsonify(success=True)
-
+    
     # Run Flask app
     app.run(host='0.0.0.0', port=5000)
 
