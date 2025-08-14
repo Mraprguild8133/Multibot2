@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Comprehensive Telegram Bot with AI Assistant and Multiple Services
+Comprehensive Telegram Bot with AI Assistant and Multiple Services (Webhook Version)
 """
-
-import logging
-import os
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from flask import Flask, request, jsonify, render_template
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from bot.handlers import (
     start_handler, help_handler, gemini_handler, youtube_handler,
     movie_handler, removebg_handler, vision_handler, text_handler
 )
 from config import Config
+import logging
+import os
 
 # Enable logging
 logging.basicConfig(
@@ -19,50 +20,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    """Status page"""
+    return render_template('index.html', status="Bot is running")
+
+async def post_init(application: Application) -> None:
+    """Post initialization - set webhook"""
+    webhook_url = Config.WEBHOOK_URL
+    await application.bot.set_webhook(webhook_url)
+
 def main():
-    """Start the bot"""
+    """Start the bot in webhook mode"""
     # Get bot token from environment
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not bot_token:
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
         return
 
-    # Get port from environment variable or default to 5000
-    port = int(os.environ.get('PORT', 5000))
-
     # Create application
-    application = Application.builder().token(bot_token).build()
+    application = Application.builder().token(bot_token).post_init(post_init).build()
 
-    # Add command handlers
+    # Add handlers
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_handler))
     application.add_handler(CommandHandler("ai", gemini_handler))
     application.add_handler(CommandHandler("youtube", youtube_handler))
     application.add_handler(CommandHandler("movie", movie_handler))
     application.add_handler(CommandHandler("removebg", removebg_handler))
-    
-    # Add message handlers
     application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, vision_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    logger.info(f"Bot started successfully on port {port}!")
-    
-    # Run the bot with webhook configuration for production
-    if os.environ.get('ENVIRONMENT') == 'production':
-        webhook_url = os.environ.get('WEBHOOK_URL')
-        if not webhook_url:
-            logger.error("WEBHOOK_URL environment variable not set for production")
-            return
-        
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=bot_token,
-            webhook_url=f"{webhook_url}/{bot_token}"
-        )
-    else:
-        # Run with polling for development
-        application.run_polling(allowed_updates=["message"])
+    # Flask route for webhook
+    @app.route('/webhook', methods=['POST'])
+    async def webhook():
+        """Handle incoming updates"""
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        await application.update_queue.put(update)
+        return jsonify(success=True)
+
+    # Run Flask app
+    app.run(host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
     main()
