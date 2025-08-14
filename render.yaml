@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: your_bot_token
+      - key: RENDER_SERVICE_NAME
+        value: your-service-name  # Must match your Render service name
+      - key: WEBHOOK_SECRET
+        value: your_secret_string
