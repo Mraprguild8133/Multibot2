@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Comprehensive Telegram Bot with AI Assistant and Multiple Services
-(Polling-only version with health check on port 5000)
 """
 
 import logging
@@ -12,7 +11,6 @@ from bot.handlers import (
     movie_handler, removebg_handler, vision_handler, text_handler
 )
 from config import Config
-from flask import Flask  # For health check endpoint
 
 # Enable logging
 logging.basicConfig(
@@ -20,20 +18,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-def run_health_check():
-    """Run a simple health check server on port 5000"""
-    app = Flask(__name__)
-
-    @app.route('/')
-    def health_check():
-        return "Bot is running", 200
-
-    # Run in a separate thread
-    import threading
-    thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000))
-    thread.daemon = True
-    thread.start()
 
 def main():
     """Start the bot"""
@@ -43,8 +27,8 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
         return
 
-    # Start health check server
-    run_health_check()
+    # Get port from environment variable or default to 5000
+    port = int(os.environ.get('PORT', 5000))
 
     # Create application
     application = Application.builder().token(bot_token).build()
@@ -61,10 +45,24 @@ def main():
     application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, vision_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    logger.info("Bot started in polling mode with health check on port 5000")
+    logger.info(f"Bot started successfully on port {port}!")
     
-    # Run the bot in polling mode
-    application.run_polling(allowed_updates=["message"])
+    # Run the bot with webhook configuration for production
+    if os.environ.get('ENVIRONMENT') == 'production':
+        webhook_url = os.environ.get('WEBHOOK_URL')
+        if not webhook_url:
+            logger.error("WEBHOOK_URL environment variable not set for production")
+            return
+        
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=bot_token,
+            webhook_url=f"{webhook_url}/{bot_token}"
+        )
+    else:
+        # Run with polling for development
+        application.run_polling(allowed_updates=["message"])
 
 if __name__ == '__main__':
     main()
