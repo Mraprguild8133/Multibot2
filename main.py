@@ -2,7 +2,7 @@
 """
 Comprehensive Telegram Bot with AI Assistant and Multiple Services
 """
-from flask import Flask, request, 
+
 import logging
 import os
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
