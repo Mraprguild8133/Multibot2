@@ -1,82 +1,70 @@
 #!/usr/bin/env python3
 """
-Telegram Bot with Webhook - Fixed Version for Render.com
+Comprehensive Telegram Bot with AI Assistant and Multiple Services
+(Polling-only version with health check on port 5000)
 """
 
 import logging
 import os
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from bot.handlers import (
+    start_handler, help_handler, gemini_handler, youtube_handler,
+    movie_handler, removebg_handler, vision_handler, text_handler
 )
+from config import Config
+from flask import Flask  # For health check endpoint
 
-# Enable verbose logging
+# Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send welcome message"""
-    await update.message.reply_text('🚀 Bot is working! Send me a message.')
+def run_health_check():
+    """Run a simple health check server on port 5000"""
+    app = Flask(__name__)
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Echo the user message"""
-    logger.info(f"Received message: {update.message.text}")
-    await update.message.reply_text(f"You said: {update.message.text}")
+    @app.route('/')
+    def health_check():
+        return "Bot is running", 200
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors"""
-    logger.error(f"Update {update} caused error {context.error}")
-
-async def set_webhook(app: Application):
-    """Configure webhook on startup"""
-    webhook_url = f"https://{os.getenv('RENDER_SERVICE_NAME')}.onrender.com/telegram"
-    await app.bot.set_webhook(
-        webhook_url,
-        secret_token=os.getenv("WEBHOOK_SECRET"),
-        drop_pending_updates=True
-    )
-    logger.info(f"Webhook set to: {webhook_url}")
+    # Run in a separate thread
+    import threading
+    thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000))
+    thread.daemon = True
+    thread.start()
 
 def main():
     """Start the bot"""
-    # Verify essential config
-    if not (token := os.getenv("TELEGRAM_BOT_TOKEN")):
-        logger.error("Missing TELEGRAM_BOT_TOKEN")
-        return
-    if not (service_name := os.getenv("RENDER_SERVICE_NAME")):
-        logger.error("Missing RENDER_SERVICE_NAME")
+    # Get bot token from environment
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN environment variable not set")
         return
 
-    # Create and configure application
-    app = Application.builder().token(token).build()
-    
-    # Add handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-    app.add_error_handler(error_handler)
+    # Start health check server
+    run_health_check()
 
-    # Webhook configuration
-    port = int(os.environ.get("PORT", 5000))
-    webhook_url = f"https://{service_name}.onrender.com/telegram"
+    # Create application
+    application = Application.builder().token(bot_token).build()
+
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start_handler))
+    application.add_handler(CommandHandler("help", help_handler))
+    application.add_handler(CommandHandler("ai", gemini_handler))
+    application.add_handler(CommandHandler("youtube", youtube_handler))
+    application.add_handler(CommandHandler("movie", movie_handler))
+    application.add_handler(CommandHandler("removebg", removebg_handler))
     
-    logger.info("Starting webhook...")
+    # Add message handlers
+    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, vision_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    logger.info("Bot started in polling mode with health check on port 5000")
     
-    # Run with webhook
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        webhook_url=webhook_url,
-        secret_token=os.getenv("WEBHOOK_SECRET"),
-        ssl_context=None,  # Render handles SSL
-    )
+    # Run the bot in polling mode
+    application.run_polling(allowed_updates=["message"])
 
 if __name__ == '__main__':
     main()
